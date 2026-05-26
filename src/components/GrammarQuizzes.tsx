@@ -17,6 +17,18 @@ interface GrammarQuizzesProps {
   incrementCompletedLesson?: () => void;
 }
 
+interface SRSState {
+  lessonId: string;
+  lessonTitle: string;
+  lastReviewed: string | null;
+  nextReviewDate: string | null;
+  scorePercentage: number | null;
+  intervalDays: number;
+  reps: number;
+  easeFactor: number;
+  strength: number;
+}
+
 export default function GrammarQuizzes({
   xpPoints = 120,
   addXP = () => {},
@@ -25,6 +37,182 @@ export default function GrammarQuizzes({
 }: GrammarQuizzesProps) {
   // Toggle between 'oxford' and 'standard' modes
   const [quizMode, setQuizMode] = useState<'oxford' | 'standard'>('standard');
+  
+  // Spaced Repetition System (SRS) State
+  const [srsData, setSrsData] = useState<Record<string, SRSState>>(() => {
+    try {
+      const saved = localStorage.getItem('eng_srs_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed['present-simple'] && parsed['present-continuous']) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load SRS state from localStorage', e);
+    }
+    return {
+      'present-simple': {
+        lessonId: 'present-simple',
+        lessonTitle: 'Present Simple',
+        lastReviewed: null,
+        nextReviewDate: null,
+        scorePercentage: null,
+        intervalDays: 0,
+        reps: 0,
+        easeFactor: 2.5,
+        strength: 0
+      },
+      'present-continuous': {
+        lessonId: 'present-continuous',
+        lessonTitle: 'Present Continuous',
+        lastReviewed: null,
+        nextReviewDate: null,
+        scorePercentage: null,
+        intervalDays: 0,
+        reps: 0,
+        easeFactor: 2.5,
+        strength: 0
+      }
+    };
+  });
+
+  const getDecayedStrength = (item: SRSState) => {
+    if (!item.lastReviewed || !item.nextReviewDate) return 0;
+    
+    const lastTime = new Date(item.lastReviewed).getTime();
+    const nextTime = new Date(item.nextReviewDate).getTime();
+    const now = Date.now();
+    
+    const totalDuration = nextTime - lastTime;
+    if (totalDuration <= 0) return 0;
+
+    const elapsedTime = now - lastTime;
+    const remainingFraction = 1 - (elapsedTime / totalDuration);
+    
+    // Smooth decay bound between 0 and 100
+    return Math.max(0, Math.min(100, Math.round(remainingFraction * 100)));
+  };
+
+  const isReviewDue = (item: SRSState) => {
+    if (!item.nextReviewDate) return true; // never reviewed => due
+    const nextTime = new Date(item.nextReviewDate).getTime();
+    const now = Date.now();
+    return now >= nextTime;
+  };
+
+  const simulate24HoursPassed = (lessonId: string) => {
+    setSrsData(prev => {
+      const item = prev[lessonId];
+      if (!item || !item.nextReviewDate || !item.lastReviewed) return prev;
+
+      const prevLast = new Date(item.lastReviewed);
+      prevLast.setHours(prevLast.getHours() - 24);
+      
+      const prevNext = new Date(item.nextReviewDate);
+      prevNext.setHours(prevNext.getHours() - 24);
+
+      const updated = {
+        ...item,
+        lastReviewed: prevLast.toISOString(),
+        nextReviewDate: prevNext.toISOString()
+      };
+
+      const nextState = {
+        ...prev,
+        [lessonId]: updated
+      };
+
+      try {
+        localStorage.setItem('eng_srs_state', JSON.stringify(nextState));
+      } catch (e) {}
+
+      return nextState;
+    });
+  };
+
+  const updateSRS = (lessonId: string, percentage: number) => {
+    if (lessonId !== 'present-simple' && lessonId !== 'present-continuous') return;
+
+    setSrsData(prev => {
+      const current = prev[lessonId] || {
+        lessonId,
+        lessonTitle: lessonId === 'present-simple' ? 'Present Simple' : 'Present Continuous',
+        lastReviewed: null,
+        nextReviewDate: null,
+        scorePercentage: null,
+        intervalDays: 0,
+        reps: 0,
+        easeFactor: 2.5,
+        strength: 0
+      };
+
+      // Quality rating Q from 0 to 5 based on final quiz score %
+      let Q = 0;
+      if (percentage >= 90) Q = 5;
+      else if (percentage >= 80) Q = 4;
+      else if (percentage >= 60) Q = 3;
+      else if (percentage >= 45) Q = 2;
+      else if (percentage >= 25) Q = 1;
+      else Q = 0;
+
+      let nextReps = current.reps;
+      let nextInterval = current.intervalDays;
+      let nextEase = current.easeFactor;
+
+      if (Q >= 3) {
+        if (nextReps === 0) {
+          nextInterval = 1; // 1 day
+        } else if (nextReps === 1) {
+          nextInterval = 3; // 3 days
+        } else {
+          nextInterval = Math.round(nextInterval * nextEase);
+        }
+        nextReps += 1;
+        nextEase = nextEase + (0.1 - (5 - Q) * (0.08 + (5 - Q) * 0.02));
+      } else {
+        // Did not pass the check, reset repetition sequence and schedule for tomorrow again
+        nextReps = 0;
+        nextInterval = 1;
+        nextEase = Math.max(1.3, nextEase - 0.15);
+      }
+
+      if (nextEase < 1.3) nextEase = 1.3;
+      if (nextInterval < 1) nextInterval = 1;
+      if (nextInterval > 30) nextInterval = 30; // Max repetition gap 30 days
+
+      const now = new Date();
+      const lastReviewedStr = now.toISOString();
+      
+      const reviewDate = new Date();
+      reviewDate.setDate(now.getDate() + nextInterval);
+      const nextReviewDateStr = reviewDate.toISOString();
+
+      const updatedItem: SRSState = {
+        ...current,
+        lastReviewed: lastReviewedStr,
+        nextReviewDate: nextReviewDateStr,
+        scorePercentage: percentage,
+        intervalDays: nextInterval,
+        reps: nextReps,
+        easeFactor: Number(nextEase.toFixed(2)),
+        strength: 100
+      };
+
+      const nextState = {
+        ...prev,
+        [lessonId]: updatedItem
+      };
+
+      try {
+        localStorage.setItem('eng_srs_state', JSON.stringify(nextState));
+      } catch (e) {
+        console.warn(e);
+      }
+
+      return nextState;
+    });
+  };
   
   // Selection states
   const [selectedLesson, setSelectedLesson] = useState<GrammarLesson>(grammarLessons[0]);
@@ -203,6 +391,11 @@ export default function GrammarQuizzes({
           : `"${selectedLesson.title}" grammatika darsi testini tugatganingiz uchun`;
         addXP(bonus, desc);
         incrementCompletedLesson();
+
+        // Update Spaced Repetition (SRS) when finishing standard grammar quizzes
+        if (quizMode === 'standard' && (selectedLesson.id === 'present-simple' || selectedLesson.id === 'present-continuous')) {
+          updateSRS(selectedLesson.id, getPercentage());
+        }
       } catch (err) {}
     }
   };
@@ -361,6 +554,146 @@ export default function GrammarQuizzes({
             )}
           </div>         </div>
         </div>
+
+        {/* SPACED REPETITION (SRS) MEMORY TRACKER */}
+        {quizMode === 'standard' && (
+          <div className="bg-gradient-to-br from-indigo-50/80 via-white to-violet-50/40 border border-indigo-150 rounded-3xl p-5 space-y-4 shadow-xs relative overflow-hidden mt-4">
+            <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-violet-100/40 rounded-full blur-2xl" />
+            
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-xl">🧠</span>
+                <div>
+                  <h4 className="text-[11px] font-black text-indigo-950 uppercase tracking-wide leading-tight">SRS Intellektual Takrorlash</h4>
+                  <p className="text-[9px] text-slate-500 font-medium mt-0.5">Ebbingauz Unutilish egrisi bo'yicha</p>
+                </div>
+              </div>
+              <span className="bg-indigo-100 text-indigo-700 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                Faol
+              </span>
+            </div>
+
+            <div className="space-y-3.5">
+              {['present-simple', 'present-continuous'].map(id => {
+                const item = srsData[id];
+                if (!item) return null;
+                const decayedStr = getDecayedStrength(item);
+                const isDue = isReviewDue(item);
+                const hasLastScore = item.scorePercentage !== null;
+                
+                // Color formatting based on memory strength
+                let strengthColor = "bg-rose-500";
+                let textCol = "text-rose-600";
+                if (decayedStr >= 75) {
+                  strengthColor = "bg-emerald-500";
+                  textCol = "text-emerald-700";
+                } else if (decayedStr >= 40) {
+                  strengthColor = "bg-amber-500";
+                  textCol = "text-amber-700";
+                }
+
+                return (
+                  <div key={id} className="bg-white/85 p-3.5 rounded-2xl border border-indigo-100/40 shadow-3xs space-y-2.5 relative">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h5 className="text-xs font-black text-slate-800 leading-none">
+                          {item.lessonTitle}
+                        </h5>
+                        <p className="text-[9px] text-slate-400 font-bold mt-1">
+                          {item.lastReviewed 
+                            ? `So'nggi: ${new Date(item.lastReviewed).toLocaleDateString('uz-UZ')}`
+                            : 'Mavzu hali o\'rganilmagan'}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        {isDue ? (
+                          <span className="inline-block bg-rose-50 text-rose-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase animate-pulse border border-rose-100">
+                            Takrorlash Kerak ⏳
+                          </span>
+                        ) : (
+                          <span className="inline-block bg-emerald-50 text-emerald-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase border border-emerald-100">
+                            Saqlangan ✅ {item.intervalDays > 0 && `(${item.intervalDays} kundan keyin)`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress representation for memory strength */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[9px] font-bold text-slate-500">
+                        <span>Xotira Salomatligi:</span>
+                        <span className={`font-mono font-black ${textCol}`}>{decayedStr}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-500 ${strengthColor}`}
+                          style={{ width: `${decayedStr}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Meta information columns */}
+                    <div className="grid grid-cols-2 gap-2 text-[9px] border-t border-slate-50 pt-2 text-slate-500 font-bold">
+                      <div>
+                        Ball: <span className="text-indigo-650 font-black">{hasLastScore ? `${item.scorePercentage}%` : '—'}</span>
+                      </div>
+                      <div>
+                        Iteratsiya: <span className="text-indigo-650 font-black">{item.reps} marta</span>
+                      </div>
+                    </div>
+
+                    {/* Action buttons list */}
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <button
+                        onClick={() => {
+                          const targetLesson = grammarLessons.find(x => x.id === id);
+                          if (targetLesson) {
+                            setSelectedLesson(targetLesson);
+                            // Programmed delay for cleaner state transition
+                            setTimeout(() => {
+                              const pool = quizzesData[id] || [];
+                              setCurrentQuestionsPool(pool);
+                              setCurrentQuestionIndex(0);
+                              setSelectedAnswer(null);
+                              setIsSubmitted(false);
+                              setScore(0);
+                              setShowResults(false);
+                              setUserAnswers({});
+                              setActiveTab('quiz');
+                            }, 50);
+                          }
+                        }}
+                        className={`flex-1 text-center py-2 rounded-xl font-extrabold text-[10px] tracking-wider uppercase transition-all duration-150 cursor-pointer ${
+                          isDue 
+                            ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs active:scale-98'
+                            : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                        }`}
+                      >
+                        {isDue ? 'Hozir Takrorlash 🔑' : 'Qayta Mustahkamlash 🔄'}
+                      </button>
+
+                      {/* Time-travel simulation cheat button (helps users evaluate SRS interval decays!) */}
+                      {hasLastScore && (
+                        <button
+                          onClick={() => simulate24HoursPassed(id)}
+                          className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-[9px] px-2 py-2 rounded-xl transition-all cursor-pointer active:scale-95"
+                          title="Sinov: 24 soat o'tkazish"
+                        >
+                          +24s ⏳
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-indigo-50/40 p-2.5 rounded-xl border border-indigo-100/50 text-[9px] text-slate-600 leading-normal font-semibold">
+              <span className="font-extrabold text-indigo-800">💡 SRS nima?</span> Darsni yuqori ballga topshirsangiz, dars qayta so'ralishi davri uzayadi (1, keyin 3, 7 kunga). Agar past ball olsangiz, ertagayoq takrorlash sanasi belgilanadi.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* RIGHT COLUMN - Main Syllabus Card or Active Quiz Platform */}
