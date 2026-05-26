@@ -1,0 +1,6 @@
+{
+  "name": "Ingliz Tili Grammatikasi va Alifbo",
+  "description": "Ingliz tili noldan boshlovchilar uchun darslar va Oxford Discover imtihonlari: Grade 1-6 uchun tasodifiy 20 talik testlar majmuasi, grammatika, audio alifbo va qiziqarli o'yinlar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
