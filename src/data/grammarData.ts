@@ -90,6 +90,31 @@ export const grammarLessons: GrammarLesson[] = [
       { english: 'Are you listening to the teacher?', uzbek: 'Siz o\'qituvchini eshityapsizmi?', description: 'So\'roq shakl' }
     ],
     commonTimeExpressionsUz: ['now (hozir)', 'right now (aynan hozir)', 'at the moment (aynan shu lahzada)', 'Look! (Qarang!)', 'Listen! (Eshiting!)']
+  },
+  {
+    id: 'master-mix',
+    title: 'Master Challenge',
+    titleUz: 'Murakkab Zamonlar & Faktlar',
+    shortDescUz: 'Stative (holat) fe\'llari, jadvalli kelajak, va murakkab Present Simple / Continuous / Past Simple aralashmalari.',
+    formula: 'Stative verbs: no Continuous | Schedules: Present Simple | Contrast: Permanent vs Temporary',
+    explanationUz: `
+- **Master Qoidalari (Advanced Rules):**
+  1. **Stative Verbs (Holat fe'llari):** *know, think (fikr bildirsa), believe, love, hate, taste (ta'mga ega bo'lsa)* kabi fe'llar harakat davom etayotgan bo'lsa ham unga **-ing** qo'shilmaydi va oddiy zamonda yoziladi.
+     - *To'g'ri:* I think it is a good idea. (Men shunday deb fikrlayapman)
+     - *Noto'g'ri:* I am thinking it is a good idea.
+     - *Eslatma (Dynamic use):* Agar "think" rejalashtirish yoki chuqur o'ylash jarayoni ma'nosida kelsa, **-ing** qo'shiladi: *I am thinking of going to Samarqand.* (O'ylayapman, miyamda rejalashtiryapman).
+  2. **Jadval va Rejalar (Timetables):** Jamoat transporti, poyezdlar, darslar jadvallari va rasmiy tadbirlar kelajakka tegishli bo'lsa ham **Present Simple** da beriladi.
+     - *To'g'ri:* The play starts at 7 PM tomorrow.
+  3. **Continuous Zamonlar bilan "always":** Agar biror odat zerikarli, asabga teguvchi bo'lsa va norozilik bildirsa, Present Continuous zamoni "always" bilan qo'llanadi.
+     - *Misol:* She is always losing her keys! (U doim kalitlarini yo'qotib yuradi-ya, asabni buzib!)
+    `,
+    examples: [
+      { english: 'The train leaves at 8:00 AM tomorrow.', uzbek: 'Poyezd ertaga ertalab soat 8:00 da jo\'naydi.', description: 'Kelajak jadvali bo\'lgani uchun Present Simple.' },
+      { english: 'This milk tastes sour.', uzbek: 'Bu sut achchiq ta\'m beryapti (achib qolibdi).', description: 'Taste - hid yoki ta\'m sezish holat fe\'li.' },
+      { english: 'I am thinking about my exams right now.', uzbek: 'Hozir aynan imtihonlarim haqida miyamda o\'ylayapman.', description: 'Think rejalashtirish yoki fikrlash jarayoni sifatida faol (dynamic).' },
+      { english: 'He is always talking loudly in class!', uzbek: 'U doim darsda baland ovozda gapiradi (asabga tegib)!', description: 'Qayta-qayta takrorlanuvchi zerikarli odat Continuous shaklida.' }
+    ],
+    commonTimeExpressionsUz: ['think of/about', 'timetables (jadvallar)', 'always (norozilik bilan)', 'stative context']
   }
 ];
 
@@ -308,6 +333,78 @@ export const quizzesData: Record<string, QuizQuestion[]> = {
       options: ['is', 'do', 'dids', 'are'],
       correctAnswer: 'are',
       explanation: "Ko'plikdagi 'they' olmoshi hamda 'right now' (aynan hozir) so'zi uchun Present Continuous so'rog'ida 'are' javobi to'g'ri keladi."
+    }
+  ],
+  'master-mix': [
+    {
+      id: 'mm1',
+      question: 'We ________ any problems with the app at the moment.',
+      options: ['do not have', 'are not having', 'does not have', 'not having'],
+      correctAnswer: 'do not have',
+      explanation: "'Have' fe'li egalik qilish ma'nosida (mening borim degan ma'noda) stative (holat) fe'lidir, shuning uchun 'at the moment' bo'lsa ham Present Simple'da bo'ladi."
+    },
+    {
+      id: 'mm2',
+      question: 'The flight to London ________ at exactly 9:45 PM tomorrow night.',
+      options: ['is departing', 'departs', 'will departed', 'departing'],
+      correctAnswer: 'departs',
+      explanation: "Poyezd, samolyot va boshqa rasmiy jadvallar (timetables) kelajakka tegishli bo'lsa ham Present Simple'da yoziladi (departs)."
+    },
+    {
+      id: 'mm3',
+      question: 'I honestly ________ that he is telling the absolute truth.',
+      options: ['believe', 'am believing', 'believes', 'believed'],
+      correctAnswer: 'believe',
+      explanation: "'Believe' (ishonmoq) aqliy munosabatni ifodalovchi holat fe'lidir. Hech qachon davomli (Continuous) zamonlarda qo'llanilmaydi."
+    },
+    {
+      id: 'mm4',
+      question: 'Why are you so late? Our boss ________ for you for over an hour!',
+      options: ['waits', 'is waiting', 'wait', 'waited'],
+      correctAnswer: 'is waiting',
+      explanation: "Hozirgi paytdagi jiddiy va davom etayotgan jarayonni urg'ulash uchun Present Continuous (is waiting) tanlanadi."
+    },
+    {
+      id: 'mm5',
+      question: 'Be quiet! I ________ of a solution to this difficult math problem.',
+      options: ['think', 'am thinking', 'thinks', 'thought'],
+      correctAnswer: 'am thinking',
+      explanation: "Bu yerda 'think' - boshda rejalashtirish yoki faol fikrlash jarayonini (dynamic action) bildirmoqda. Shuning uchun '-ing' qo'shila oladi."
+    },
+    {
+      id: 'mm6',
+      question: 'This delicious strawberry soup ________ so sweet and fresh!',
+      options: ['tastes', 'is tasting', 'taste', 'tasted'],
+      correctAnswer: 'tastes',
+      explanation: "'Taste' fe'li o'zi ma'lum bir ta'mga ega ekanligini ifodalasa, u holat fe'lidir (tastes) va Continuous'da ishlatilmaydi."
+    },
+    {
+      id: 'mm7',
+      question: 'Stop doing that! You ________ always making silly noise in the library.',
+      options: ['do', 'are', 'is', 'did'],
+      correctAnswer: 'are',
+      explanation: "Zardali, asabiylashgan norozilik ma'nosidagi tez-tez takrorlanuvchi odatlar 'always' bilan birga Present Continuous zamonida ko'rsatiladi."
+    },
+    {
+      id: 'mm8',
+      question: 'While the students ________ a test yesterday, the electric power failed.',
+      options: ['took', 'were taking', 'are taking', 'takes'],
+      correctAnswer: 'were taking',
+      explanation: "O'tmishda uzoq vaqt davom etayotgan jarayon (were taking) qisqa bir harakat (failed) tomonidan bo'lingan, shuning uchun Past Continuous qo'llanadi."
+    },
+    {
+      id: 'mm9',
+      question: 'My father ________ a private conversation with his doctor right now.',
+      options: ['has', 'is having', 'have', 'having'],
+      correctAnswer: 'is having',
+      explanation: "Bu yerda 'have' egalikni emas, balki faol ishtirokni (conversation or lunch) bildirmoqda. Shuning uchun dynamic action sifatida 'is having' bo'ladi."
+    },
+    {
+      id: 'mm10',
+      question: 'Last Sunday, my car ________ down while I was driving back home.',
+      options: ['broke', 'broken', 'was breaking', 'breaks'],
+      correctAnswer: 'broke',
+      explanation: "Uzoq davomiy harakat davomida (was driving) birdaniga yuz bergan o'tgan zamon harakati uchun Past Simple (broke) ishlatiladi."
     }
   ]
 };

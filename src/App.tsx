@@ -5,14 +5,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Volume2, Gamepad2, Mic, Flame, Trophy, GraduationCap, Sparkles, CheckCircle2, Lock, Unlock, AlertCircle, Award, CheckCircle } from 'lucide-react';
+import { BookOpen, Volume2, Gamepad2, Mic, Flame, Trophy, GraduationCap, Sparkles, CheckCircle2, Lock, Unlock, AlertCircle, Award, CheckCircle, BarChart2 } from 'lucide-react';
 import GrammarQuizzes from './components/GrammarQuizzes';
 import AudioAlphabet from './components/AudioAlphabet';
 import EducationalGames from './components/EducationalGames';
 import PronunciationLab from './components/PronunciationLab';
 import AIAgentTrivia from './components/AIAgentTrivia';
+import ProgressDashboard from './components/ProgressDashboard';
 
-type ActiveTab = 'grammar' | 'alphabet' | 'games' | 'lab';
+type ActiveTab = 'dashboard' | 'grammar' | 'alphabet' | 'games' | 'lab';
 
 export interface LevelInfo {
   level: number;
@@ -84,6 +85,24 @@ interface XpToast {
   reason: string;
 }
 
+export interface DailyQuest {
+  id: string; // 'grammar', 'alphabet', 'games', 'lab'
+  titleEv: string;
+  titleUz: string;
+  descUz: string;
+  xpBonus: number;
+  completed: boolean;
+  tabTarget: ActiveTab;
+  actionLabel: string;
+}
+
+const DEFAULT_QUESTS: DailyQuest[] = [
+  { id: 'grammar', titleEv: 'Grammar Champion', titleUz: 'Grammatika & Testlar', descUz: 'Grammatika darsini o\'qing yoki sinf testini yakunlang', xpBonus: 20, completed: false, tabTarget: 'grammar', actionLabel: 'Mavzularga o\'tish 📝' },
+  { id: 'alphabet', titleEv: 'Alphabet Explorer', titleUz: 'Audio Alifbo (A-Z)', descUz: 'Harflar yoki misoliy gaplarni ovozli tinglang', xpBonus: 15, completed: false, tabTarget: 'alphabet', actionLabel: 'Tinglashga o\'tish 🔊' },
+  { id: 'games', titleEv: 'Tense Warrior', titleUz: 'Qiziqarli O\'yinlar', descUz: 'O\'yinda so\'z yig\'ing yoki duelda jangga kiring', xpBonus: 20, completed: false, tabTarget: 'games', actionLabel: 'O\'yin dahliziga o\'tish 🎮' },
+  { id: 'lab', titleEv: 'Eloquence Star', titleUz: 'Talaffuz Laboratoriyasi', descUz: 'She\'r satrini aytib, unga baho oling', xpBonus: 25, completed: false, tabTarget: 'lab', actionLabel: 'Mashg\'ulotga o\'tish 🎙' },
+];
+
 const playLevelUpTone = () => {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -112,7 +131,7 @@ const playLevelUpTone = () => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('grammar');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   
   // Dashboard indicators stored in client state and synced with localStorage
   const [streak, setStreak] = useState<number>(3); 
@@ -120,6 +139,15 @@ export default function App() {
   const [completedLessons, setCompletedLessons] = useState<number>(1);
   const [xpToasts, setXpToasts] = useState<XpToast[]>([]);
   
+  // Daily Quests State initialized with localStorage mapping
+  const [quests, setQuests] = useState<DailyQuest[]>(() => {
+    try {
+      const saved = localStorage.getItem('enguz_quests_status');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_QUESTS;
+  });
+
   // Level-Up celebration state
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
   const [unlockedFeatures, setUnlockedFeatures] = useState<string[]>([]);
@@ -143,10 +171,21 @@ export default function App() {
         lastLevelRef.current = getLevelInfo(120).level;
       }
       if (savedStreak) setStreak(parseInt(savedStreak, 10));
-      if (savedLessons) setCompletedLessons(parseInt(savedLessons, 10));
+      if (savedLessons) setCompletedLessons(parseInt(savedLessons, 15));
     } catch (e) {
       console.warn('LocalStorage is blocked or disabled', e);
     }
+
+    // Interactive daily reset checker
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const savedDate = localStorage.getItem('enguz_quests_date');
+      if (savedDate !== today) {
+        localStorage.setItem('enguz_quests_date', today);
+        localStorage.setItem('enguz_quests_status', JSON.stringify(DEFAULT_QUESTS));
+        setQuests(DEFAULT_QUESTS);
+      }
+    } catch (e) {}
 
     // Set up window listener for cross-component triggers
     const handleStorageUpdate = () => {
@@ -172,6 +211,45 @@ export default function App() {
     }, 4000);
     return () => clearInterval(interval);
   }, []);
+
+  const checkQuestCompletion = (reason: string) => {
+    let targetQuestId: string | null = null;
+    const lower = reason.toLowerCase();
+    
+    if (lower.includes('oxford') || lower.includes('grammatika') || lower.includes('test') || lower.includes('srs')) {
+      targetQuestId = 'grammar';
+    } else if (lower.includes('alifbo') || lower.includes('tinglovchi') || lower.includes('harf') || lower.includes('alphabet')) {
+      targetQuestId = 'alphabet';
+    } else if (lower.includes('so\'z') || lower.includes('gap tuzish') || lower.includes('tense duel') || lower.includes('o\'yin') || lower.includes('nishon') || lower.includes('games')) {
+      targetQuestId = 'games';
+    } else if (lower.includes('talaffuz') || lower.includes('she\'r') || lower.includes('phrase') || lower.includes('speaking')) {
+      targetQuestId = 'lab';
+    }
+    
+    if (targetQuestId) {
+      setQuests(prev => {
+        const quest = prev.find(q => q.id === targetQuestId);
+        if (quest && !quest.completed) {
+          const updated = prev.map(q => q.id === targetQuestId ? { ...q, completed: true } : q);
+          try {
+            localStorage.setItem('enguz_quests_status', JSON.stringify(updated));
+          } catch (e) {}
+          
+          addXP(quest.xpBonus, `Kundalik reja: "${quest.titleUz}" vazifasi bajarildi! 🌟🎁`);
+          
+          const allDoneNow = updated.every(q => q.completed);
+          if (allDoneNow) {
+            setTimeout(() => {
+              addXP(50, `Bugungi barcha 4 ta topshiriqlarni yakunlaganligingiz uchun Super Combo Bonus! 🏆👑🦁`);
+            }, 1200);
+          }
+          
+          return updated;
+        }
+        return prev;
+      });
+    }
+  };
 
   const addXP = (amount: number, reason: string) => {
     setXpPoints(prev => {
@@ -215,6 +293,14 @@ export default function App() {
       
       return updated;
     });
+
+    // Check quest milestones outside the direct setXpPoints render flow
+    const isQuestBonus = reason.includes("Kundalik reja") || reason.includes("Super Combo");
+    if (!isQuestBonus) {
+      setTimeout(() => {
+        checkQuestCompletion(reason);
+      }, 50);
+    }
   };
 
   const incrementCompletedLesson = () => {
@@ -427,10 +513,133 @@ export default function App() {
           </div>
         </header>
 
+        {/* DAILY QUESTS & STUDY MASTER - Contemporary Bento Panel */}
+        <section id="daily-goals-dashboard" className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white rounded-3xl p-5 sm:p-6 shadow-md relative overflow-hidden border border-slate-800">
+          {/* Subtle atmospheric light effect */}
+          <div className="absolute -right-16 -top-16 w-56 h-56 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -left-16 -bottom-16 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5 pb-4 border-b border-indigo-900/35 relative z-10">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="flex items-center justify-center w-6 h-6 bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-bold ring-1 ring-indigo-400/20 shadow-xs">
+                  🎯
+                </span>
+                <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-indigo-200 font-display">
+                  Kunlik o'quv rejangiz & topshiriqlar (Daily Quests)
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 font-medium leading-relaxed">
+                Har kuni darslarni va o'yinlarni bajarib, qo'shimcha rag'batlantiruvchi XP ballarini yutib oling!
+              </p>
+            </div>
+            
+            {/* Quest Completion Ratio Progress bar */}
+            <div className="flex items-center space-x-3 bg-white/5 border border-white/15 px-4 py-2 rounded-2xl shrink-0 self-stretch md:self-auto justify-between md:justify-start">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">
+                Bajarildi: {quests.filter(q => q.completed).length}/4
+              </span>
+              <div className="w-16 h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800 shrink-0">
+                <div 
+                  className="h-full bg-emerald-400 rounded-full transition-all duration-500" 
+                  style={{ width: `${(quests.filter(q => q.completed).length / 4) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Quest Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+            {quests.map(quest => {
+              const isDone = quest.completed;
+              return (
+                <div 
+                  key={quest.id}
+                  className={`flex flex-col justify-between p-4 rounded-3xl border transition-all duration-200 ${
+                    isDone 
+                      ? 'bg-emerald-950/15 border-emerald-500/25 text-emerald-100 shadow-inner' 
+                      : 'bg-slate-900/40 border-slate-800/80 hover:border-slate-800 text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                        isDone ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {quest.titleEv}
+                      </span>
+                      <span className="text-[10px] font-black text-amber-400 flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/10">
+                        +{quest.xpBonus} XP 🏅
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-[13px] font-extrabold tracking-tight flex items-center gap-2">
+                        {isDone ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <div className="w-3.5 h-3.5 rounded-full border border-slate-700 shrink-0 mt-0.5" />
+                        )}
+                        <span>{quest.titleUz}</span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-semibold mt-1 leading-normal">
+                        {quest.descUz}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 border-t border-slate-850 pt-3">
+                    {isDone ? (
+                      <div className="text-[10px] text-emerald-405 text-emerald-400 font-black text-center py-1.5 bg-emerald-500/10 rounded-xl cursor-default uppercase tracking-wider">
+                        Bajarildi ✅
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleTabChange(quest.tabTarget)}
+                        className="w-full text-center py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-97 border border-indigo-500/20 hover:border-indigo-600 transition-all font-black text-[10px] tracking-wider rounded-xl uppercase text-indigo-50 cursor-pointer"
+                      >
+                        {quest.actionLabel}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Grand Complete Celebration Banner (when all are done) */}
+          {quests.every(q => q.completed) && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mt-4 p-4 bg-gradient-to-r from-emerald-500/15 to-teal-500/15 rounded-2xl border border-emerald-500/25 flex items-center gap-4"
+            >
+              <div className="text-3xl animate-bounce select-none">🏆</div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-black text-emerald-300">Tabriklaymiz! Kunlik rejani 100% bajardingiz!</h4>
+                <p className="text-[10px] text-emerald-200/85 font-medium mt-0.5 leading-normal">Siz bugun barcha 4 ta yo'nalish bo'yicha mukammal mashg'ulot qildingiz va qo'shimcha +50 XP Combo Bonus ballini yutib oldingiz. Tezlikni pasaytirmang! ✨🐯</p>
+              </div>
+            </motion.div>
+          )}
+        </section>
+
         {/* NAVIGATION TABS BAR (Clean & Premium pill-style layout) */}
         <div className="flex overflow-x-auto pb-1.5 scrollbar-none">
-          <div className="flex bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/60 w-full sm:w-auto space-x-1.5 min-w-[580px] sm:min-w-0">
+          <div className="flex bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/60 w-full sm:w-auto space-x-1.5 min-w-[720px] sm:min-w-0">
             
+            <button
+              id="tab-user-dashboard"
+              onClick={() => handleTabChange('dashboard')}
+              className={`flex-1 sm:flex-none flex items-center justify-center space-x-2 px-5 py-3 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'dashboard'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 bg-transparent hover:bg-white/20'
+              }`}
+            >
+              <BarChart2 className="w-4 h-4" />
+              <span>📊 Progress Dashboard</span>
+            </button>
+
             <button
               id="tab-grammar-lessons"
               onClick={() => handleTabChange('grammar')}
@@ -489,6 +698,24 @@ export default function App() {
         {/* WORKSPACE PREVIEW FRAME */}
         <main className="min-h-[500px]">
           <AnimatePresence mode="wait">
+            {activeTab === 'dashboard' && (
+              <motion.div
+                key="dashboard-panel"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.22 }}
+              >
+                <ProgressDashboard 
+                  xpPoints={xpPoints} 
+                  streak={streak} 
+                  completedLessonsCount={completedLessons} 
+                  onNavigateTab={(tab) => handleTabChange(tab)}
+                  addXP={addXP}
+                />
+              </motion.div>
+            )}
+
             {activeTab === 'grammar' && (
               <motion.div
                 key="grammar-panel"

@@ -185,12 +185,34 @@ export default function PronunciationLab({
           if (score >= 70) {
             addXP(10, `She'r satrini to'g'ri talaffuz qilganingiz uchun`);
           }
+          
+          // Save pronunciation stats
+          try {
+            const currentBest = parseInt(localStorage.getItem('eng_pronunciation_best') || '0', 10);
+            if (score > currentBest) {
+              localStorage.setItem('eng_pronunciation_best', score.toString());
+            }
+            const totalAttempts = parseInt(localStorage.getItem('eng_pronunciation_attempts') || '0', 10) + 1;
+            localStorage.setItem('eng_pronunciation_attempts', totalAttempts.toString());
+            window.dispatchEvent(new Event('storage'));
+          } catch (e) {}
         } else {
           const score = calculateSimpleMatch(transcript, input);
           setMatchScore(score);
           if (score >= 70) {
             addXP(5, `Gapni to'g'ri talaffuz qilganingiz uchun`);
           }
+          
+          // Save pronunciation stats
+          try {
+            const currentBest = parseInt(localStorage.getItem('eng_pronunciation_best') || '0', 10);
+            if (score > currentBest) {
+              localStorage.setItem('eng_pronunciation_best', score.toString());
+            }
+            const totalAttempts = parseInt(localStorage.getItem('eng_pronunciation_attempts') || '0', 10) + 1;
+            localStorage.setItem('eng_pronunciation_attempts', totalAttempts.toString());
+            window.dispatchEvent(new Event('storage'));
+          } catch (e) {}
         }
       };
 

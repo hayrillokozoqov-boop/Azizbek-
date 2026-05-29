@@ -28,6 +28,7 @@ export default function AudioAlphabet({
   // Autoplay (ketma-ket yodlash) state
   const [isAutoplayActive, setIsAutoplayActive] = useState(false);
   const [autoplayIndex, setAutoplayIndex] = useState<number>(-1);
+  const [lastSpokenText, setLastSpokenText] = useState<string>('');
   const autoplayActiveRef = useRef(false);
   const speechRateRef = useRef(speechRate);
   const accentRef = useRef(accent);
@@ -140,6 +141,14 @@ export default function AudioAlphabet({
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
     setIsPlaying(type);
+
+    // Award standard small XP for practicing a voice, avoiding rapid spamming
+    if (lastSpokenText !== text) {
+      setLastSpokenText(text);
+      try {
+        addXP(5, `Tinglovchi alifbosi: "${text}" so'zi/harfi talaffuzini eshitib mashq qildi`);
+      } catch (err) {}
+    }
 
     const utterance = new SpeechSynthesisUtterance(text);
     

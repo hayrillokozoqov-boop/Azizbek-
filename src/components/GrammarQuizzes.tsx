@@ -215,8 +215,54 @@ export default function GrammarQuizzes({
   };
   
   // Selection states
+  const [difficultyTier, setDifficultyTier] = useState<'junior' | 'senior' | 'master'>('junior');
   const [selectedLesson, setSelectedLesson] = useState<GrammarLesson>(grammarLessons[0]);
   const [selectedOxfordLevel, setSelectedOxfordLevel] = useState(oxfordLevels[0]);
+
+  // Non-repeating question system ("1ta savol takrorlanmasin")
+  const [usedQuestionIds, setUsedQuestionIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('eng_used_questions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const saveUsedQuestionIds = (ids: string[]) => {
+    try {
+      localStorage.setItem('eng_used_questions', JSON.stringify(ids));
+    } catch {}
+  };
+
+  // Filter lessons and Oxford levels dynamically based on active tier
+  const filteredLessons = grammarLessons.filter(lesson => {
+    if (difficultyTier === 'junior') return lesson.id === 'present-simple';
+    if (difficultyTier === 'senior') return lesson.id === 'present-continuous' || lesson.id === 'past-simple';
+    return lesson.id === 'master-mix';
+  });
+
+  const filteredOxfordLevels = oxfordLevels.filter(level => {
+    if (difficultyTier === 'junior') return level.id === 'od1' || level.id === 'od2';
+    if (difficultyTier === 'senior') return level.id === 'od3' || level.id === 'od4';
+    return level.id === 'od5' || level.id === 'od6';
+  });
+
+  // Synchronize active selection list on tier changes
+  useEffect(() => {
+    if (quizMode === 'standard') {
+      const isStillAvailable = filteredLessons.some(l => l.id === selectedLesson.id);
+      if (!isStillAvailable && filteredLessons.length > 0) {
+        setSelectedLesson(filteredLessons[0]);
+      }
+    } else {
+      const isStillAvailable = filteredOxfordLevels.some(l => l.id === selectedOxfordLevel.id);
+      if (!isStillAvailable && filteredOxfordLevels.length > 0) {
+        setSelectedOxfordLevel(filteredOxfordLevels[0]);
+      }
+    }
+    setActiveTab('lesson');
+  }, [difficultyTier, quizMode]);
   
   // General quiz workflow
   const [activeTab, setActiveTab] = useState<'lesson' | 'quiz'>('lesson');
@@ -231,6 +277,16 @@ export default function GrammarQuizzes({
   const [score, setScore] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({}); // questionId -> chosenOption
+
+  // Read/studied lessons checklist
+  const [readLessons, setReadLessons] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('eng_read_lessons');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Speech synthesis for active question and options
   useEffect(() => {
@@ -271,17 +327,20 @@ export default function GrammarQuizzes({
     if (lessonId === 'past-simple' && levelInfo.level < 3) {
       return { locked: true, requiredLevel: 3, requiredXp: 350 };
     }
+    if (lessonId === 'master-mix' && levelInfo.level < 4) {
+      return { locked: true, requiredLevel: 4, requiredXp: 650 };
+    }
     return { locked: false, requiredLevel: 1, requiredXp: 0 };
   };
 
   const isOxfordLocked = (levelId: string) => {
-    if ((levelId === 'level-3' || levelId === 'level-4') && levelInfo.level < 2) {
+    if ((levelId === 'od3' || levelId === 'od4') && levelInfo.level < 2) {
       return { locked: true, requiredLevel: 2, requiredXp: 150 };
     }
-    if (levelId === 'level-5' && levelInfo.level < 3) {
+    if (levelId === 'od5' && levelInfo.level < 3) {
       return { locked: true, requiredLevel: 3, requiredXp: 350 };
     }
-    if (levelId === 'level-6' && levelInfo.level < 4) {
+    if (levelId === 'od6' && levelInfo.level < 4) {
       return { locked: true, requiredLevel: 4, requiredXp: 650 };
     }
     return { locked: false, requiredLevel: 1, requiredXp: 0 };
@@ -328,21 +387,35 @@ export default function GrammarQuizzes({
 
   const handleStartQuiz = () => {
     if (isCurrentItemLocked) return;
-    let pool: QuizQuestion[] = [];
+    let sourcePool: QuizQuestion[] = [];
     if (quizMode === 'standard') {
-      pool = quizzesData[selectedLesson.id] || [];
+      sourcePool = quizzesData[selectedLesson.id] || [];
     } else {
-      // Oxford Discover Mode: Grab all 30 questions and randomly pick 20
-      const allQuestions = oxfordDiscoverQuestions[selectedOxfordLevel.id] || [];
-      // Fisher-Yates robust shuffle
-      const shuffled = [...allQuestions];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      // Take exactly 20 so that "savollar 20tadan bo'lsin va har safar yangi tushsin"
-      pool = shuffled.slice(0, 20);
+      sourcePool = oxfordDiscoverQuestions[selectedOxfordLevel.id] || [];
     }
+
+    // Filter available pool to completely avoid duplicate questions ("1ta savol takrorlanmasin")
+    let unusedPool = sourcePool.filter(q => !usedQuestionIds.includes(q.id));
+
+    // If unused questions are nearly exhausted (less than 4), reset this category's log
+    if (unusedPool.length < Math.min(5, sourcePool.length)) {
+      const sourceIds = sourcePool.map(q => q.id);
+      const cleaned = usedQuestionIds.filter(id => !sourceIds.includes(id));
+      setUsedQuestionIds(cleaned);
+      saveUsedQuestionIds(cleaned);
+      unusedPool = sourcePool;
+    }
+
+    // Fisher-Yates robust shuffle
+    const shuffled = [...unusedPool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Determine slice size: 20 for Oxford, 10 for standard
+    const limit = quizMode === 'oxford' ? 20 : 10;
+    const pool = shuffled.slice(0, Math.min(limit, shuffled.length));
 
     setCurrentQuestionsPool(pool);
     setCurrentQuestionIndex(0);
@@ -362,15 +435,26 @@ export default function GrammarQuizzes({
   const handleSubmitAnswer = () => {
     if (!selectedAnswer || isSubmitted) return;
     
-    const correct = currentQuestionsPool[currentQuestionIndex].correctAnswer === selectedAnswer;
+    const activeQuestion = currentQuestionsPool[currentQuestionIndex];
+    const correct = activeQuestion.correctAnswer === selectedAnswer;
     if (correct) {
       setScore(prev => prev + 1);
     }
     playSoundEffect(correct);
+
+    // Save this question ID so it is marked as used and doesn't repeat!
+    setUsedQuestionIds(prev => {
+      if (!prev.includes(activeQuestion.id)) {
+        const updated = [...prev, activeQuestion.id];
+        saveUsedQuestionIds(updated);
+        return updated;
+      }
+      return prev;
+    });
     
     setUserAnswers(prev => ({
       ...prev,
-      [currentQuestionsPool[currentQuestionIndex].id]: selectedAnswer
+      [activeQuestion.id]: selectedAnswer
     }));
     
     setIsSubmitted(true);
@@ -392,9 +476,33 @@ export default function GrammarQuizzes({
         addXP(bonus, desc);
         incrementCompletedLesson();
 
+        const scoreId = quizMode === 'oxford' ? selectedOxfordLevel.id : selectedLesson.id;
+        const currentPercentage = getPercentage();
+
+        // Store score history in localStorage
+        try {
+          const savedScoresStr = localStorage.getItem('eng_quiz_highest_scores');
+          const savedScores = savedScoresStr ? JSON.parse(savedScoresStr) : {};
+          const oldScore = savedScores[scoreId] || 0;
+          if (currentPercentage > oldScore || savedScores[scoreId] === undefined) {
+            savedScores[scoreId] = currentPercentage;
+            localStorage.setItem('eng_quiz_highest_scores', JSON.stringify(savedScores));
+          }
+
+          const savedAttemptsStr = localStorage.getItem('eng_quiz_attempts');
+          const savedAttempts = savedAttemptsStr ? JSON.parse(savedAttemptsStr) : {};
+          savedAttempts[scoreId] = (savedAttempts[scoreId] || 0) + 1;
+          localStorage.setItem('eng_quiz_attempts', JSON.stringify(savedAttempts));
+          
+          // Trigger a storage-event-like update or dispatch so other components can know
+          window.dispatchEvent(new Event('storage'));
+        } catch (e) {
+          console.error("Could not save score history", e);
+        }
+
         // Update Spaced Repetition (SRS) when finishing standard grammar quizzes
         if (quizMode === 'standard' && (selectedLesson.id === 'present-simple' || selectedLesson.id === 'present-continuous')) {
-          updateSRS(selectedLesson.id, getPercentage());
+          updateSRS(selectedLesson.id, currentPercentage);
         }
       } catch (err) {}
     }
@@ -419,6 +527,39 @@ export default function GrammarQuizzes({
       {/* LEFT SIDEBAR Column - Mode Toggler & Item List Selector */}
       <div className="xl:col-span-4 flex flex-col space-y-4">
         
+        {/* Difficulty Tier Selector (Junior, Senior, Master) */}
+        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-3xs space-y-2.5">
+          <label className="text-[10px] font-black uppercase text-indigo-950 tracking-widest block">
+            🎓 DARAXA TIPI (CHOOSE TIER):
+          </label>
+          <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 w-full rounded-2xl border border-slate-200/60">
+            {(['junior', 'senior', 'master'] as const).map((tier) => {
+              const isActive = difficultyTier === tier;
+              const labels = {
+                junior: { name: 'Junior', sub: 'Oson 👶' },
+                senior: { name: 'Senior', sub: 'O\'rta ⚡' },
+                master: { name: 'Master', sub: 'Qiyin 👑' }
+              };
+              return (
+                <button
+                  key={tier}
+                  onClick={() => setDifficultyTier(tier)}
+                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all duration-150 ${
+                    isActive 
+                      ? 'bg-indigo-600 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-200/40'
+                  }`}
+                >
+                  <span className="text-xs font-bold tracking-tight">{labels[tier].name}</span>
+                  <span className={`text-[8px] font-extrabold uppercase mt-0.5 ${isActive ? 'text-indigo-200' : 'text-slate-400'}`}>
+                    {labels[tier].sub}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Toggle Panel Button for Oxford vs Standard */}
         <div className="bg-slate-200/70 p-1.5 rounded-2xl flex border border-slate-300/40 shadow-2xs">
           <button
@@ -458,12 +599,14 @@ export default function GrammarQuizzes({
               {quizMode === 'oxford' ? 'Level / Sinf Tanlash' : 'Grammatika Darslari'}
             </h4>
             <span className="text-[10px] text-slate-400 font-bold bg-slate-200/50 px-2 py-0.5 rounded-full font-mono">
-              {quizMode === 'oxford' ? '6 ta Sinf' : '3 ta Mavzu'}
+              {quizMode === 'oxford' ? `${filteredOxfordLevels.length} ta Sinf` : `${filteredLessons.length} ta Mavzu`}
             </span>
-             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2.5">
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2.5">
             {quizMode === 'oxford' ? (
               // Oxford Discover Levels List
-              oxfordLevels.map((level) => {
+              filteredOxfordLevels.map((level) => {
                 const isSelected = selectedOxfordLevel.id === level.id;
                 const lockState = isOxfordLocked(level.id);
                 return (
@@ -508,7 +651,7 @@ export default function GrammarQuizzes({
               })
             ) : (
               // Standard Grammar Lessons List
-              grammarLessons.map((lesson) => {
+              filteredLessons.map((lesson) => {
                 const isSelected = selectedLesson.id === lesson.id;
                 const lockState = isLessonLocked(lesson.id);
                 return (
@@ -530,7 +673,7 @@ export default function GrammarQuizzes({
                         <span className={`p-1.5 rounded-lg text-xs font-bold ${
                           isSelected ? 'bg-indigo-500 text-white' : 'bg-indigo-50 text-indigo-600'
                         }`}>
-                          {lesson.title === 'Present Simple' ? 'PS' : lesson.title === 'Past Simple' ? 'PAS' : 'PC'}
+                          {lesson.id === 'present-simple' ? 'PS' : lesson.id === 'past-simple' ? 'PAS' : lesson.id === 'present-continuous' ? 'PC' : 'MMC'}
                         </span>
                         <span className="font-extrabold text-sm tracking-tight flex items-center gap-1">
                           {lesson.title}
@@ -552,7 +695,7 @@ export default function GrammarQuizzes({
                 );
               })
             )}
-          </div>         </div>
+          </div>
         </div>
 
         {/* SPACED REPETITION (SRS) MEMORY TRACKER */}
@@ -865,13 +1008,68 @@ export default function GrammarQuizzes({
 
                 {/* Bottom Trigger */}
                 {!isCurrentItemLocked && (
-                  <div className="flex justify-end pt-2 border-t border-slate-150">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-4 border-t border-slate-150">
+                    {/* Read lesson click trigger */}
+                    {quizMode === 'standard' ? (
+                      <button
+                        id={`mark-read-${selectedLesson.id}`}
+                        onClick={() => {
+                          try {
+                            const savedRead = localStorage.getItem('eng_read_lessons') || '[]';
+                            const parsedRead = JSON.parse(savedRead);
+                            if (!parsedRead.includes(selectedLesson.id)) {
+                              parsedRead.push(selectedLesson.id);
+                              localStorage.setItem('eng_read_lessons', JSON.stringify(parsedRead));
+                              addXP(10, `"${selectedLesson.title}" darsligini o'qib tugatganingiz uchun! 📚✨`);
+                              setReadLessons(parsedRead);
+                              window.dispatchEvent(new Event('storage'));
+                            }
+                          } catch (e) {}
+                        }}
+                        disabled={readLessons.includes(selectedLesson.id)}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 ${
+                          readLessons.includes(selectedLesson.id)
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-default'
+                            : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-150 cursor-pointer active:scale-97'
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{readLessons.includes(selectedLesson.id) ? "Mavzu o'qilgan ✓" : "Darsni o'qib tugatdim (+10 XP)"}</span>
+                      </button>
+                    ) : (
+                      <button
+                        id={`mark-read-${selectedOxfordLevel.id}`}
+                        onClick={() => {
+                          try {
+                            const savedRead = localStorage.getItem('eng_read_lessons') || '[]';
+                            const parsedRead = JSON.parse(savedRead);
+                            if (!parsedRead.includes(selectedOxfordLevel.id)) {
+                              parsedRead.push(selectedOxfordLevel.id);
+                              localStorage.setItem('eng_read_lessons', JSON.stringify(parsedRead));
+                              addXP(10, `"${selectedOxfordLevel.name}" dars yo'riqnomasini o'qiganingiz uchun! 🎓✨`);
+                              setReadLessons(parsedRead);
+                              window.dispatchEvent(new Event('storage'));
+                            }
+                          } catch (e) {}
+                        }}
+                        disabled={readLessons.includes(selectedOxfordLevel.id)}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 ${
+                          readLessons.includes(selectedOxfordLevel.id)
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-205 cursor-default'
+                            : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-150 cursor-pointer active:scale-97'
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{readLessons.includes(selectedOxfordLevel.id) ? "Reja o'qilgan ✓" : "O'qib chiqdim (+10 XP)"}</span>
+                      </button>
+                    )}
+
                     <button
                       id="trigger-start-lessons-end-btn"
                       onClick={handleStartQuiz}
-                      className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 font-black text-sm transition-colors py-2"
+                      className="flex items-center space-x-1.5 text-indigo-600 hover:text-indigo-800 font-black text-xs transition-colors py-2 cursor-pointer uppercase tracking-wider ml-auto"
                     >
-                      <span>Imtihonni endiroq boshlash</span>
+                      <span>Imtihonni boshlash</span>
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>

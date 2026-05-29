@@ -15,7 +15,7 @@ export interface AlphabetItem {
 }
 
 export interface GrammarLesson {
-  id: 'present-simple' | 'past-simple' | 'present-continuous';
+  id: 'present-simple' | 'past-simple' | 'present-continuous' | 'master-mix';
   title: string;
   titleUz: string;
   shortDescUz: string;
