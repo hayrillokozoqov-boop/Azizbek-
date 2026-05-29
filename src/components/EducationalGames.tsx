@@ -345,25 +345,25 @@ export default function EducationalGames({
 
   // Badge trigger utility
   const unlockBadge = (badgeId: string) => {
-    setBadges(prev => {
-      const updated = prev.map(b => b.id === badgeId ? { ...b, unlocked: true } : b);
-      const isAlreadyUnlocked = prev.find(b => b.id === badgeId)?.unlocked;
-      
-      if (!isAlreadyUnlocked) {
-        // Award XP for getting a badge
-        addXP(30, `Yangi nishon: "${updated.find(x => x.id === badgeId)?.nameUz}" ochilgani munosabati bilan`);
-        // Save back
+    const badge = badges.find(b => b.id === badgeId);
+    if (badge && !badge.unlocked) {
+      setBadges(prev => {
+        const updated = prev.map(b => b.id === badgeId ? { ...b, unlocked: true } : b);
         try {
           const dict: Record<string, boolean> = {};
           updated.forEach(x => { dict[x.id] = x.unlocked; });
           localStorage.setItem('eng_games_badges', JSON.stringify(dict));
         } catch (e) {}
-        
-        // Show audio fanfare for unlock
+        return updated;
+      });
+
+      // Safely schedule side effects outside of the React render flow
+      setTimeout(() => {
+        addXP(30, `Yangi nishon: "${badge.nameUz}" ochilgani munosabati bilan`);
         playSynthesizedTone(true);
-      }
-      return updated;
-    });
+        window.dispatchEvent(new Event('storage'));
+      }, 10);
+    }
   };
 
   // ------------------------------------
